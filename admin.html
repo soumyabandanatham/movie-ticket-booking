@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advanced Admin Dashboard | Movie Ticket Booking</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+    }
+
+    .container { max-width: 1200px; margin: auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .subtitle { color: #64748b; }
+
+    button, .link {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 7px;
+      cursor: pointer;
+      color: white;
+      background: #2457c5;
+      text-decoration: none;
+      display: inline-block;
+      margin: 3px;
+      font-size: 14px;
+    }
+
+    button:hover, .link:hover { opacity: 0.88; }
+    .link { background: #263449; }
+    .green { background: #15803d; }
+    .dark { background: #475569; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .card {
+      background: white;
+      padding: 18px;
+      border-radius: 12px;
+      box-shadow: 0 3px 12px #dfe5ee;
+    }
+
+    .card p { color: #64748b; margin: 0 0 12px; }
+    .number { font-size: 25px; font-weight: bold; overflow-wrap: anywhere; }
+    h2 { margin-top: 30px; }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+      align-items: center;
+    }
+
+    input, select {
+      padding: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      background: white;
+      min-width: 150px;
+      max-width: 100%;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      background: white;
+      border-radius: 10px;
+      margin-top: 12px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 650px;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #e2e8f0;
+      text-align: left;
+    }
+
+    th { background: #eaf0fa; }
+    .confirmed { color: #15803d; font-weight: bold; }
+    .cancelled { color: #c62828; font-weight: bold; }
+    #message { margin: 16px 0; overflow-wrap: anywhere; }
+
+    .empty {
+      padding: 18px;
+      text-align: center;
+      color: #64748b;
+    }
+
+    @media (max-width: 500px) {
+      body { padding: 12px; }
+      .number { font-size: 22px; }
+    }
+
+    @media print {
+      .no-print, header button, .toolbar, .links {
+        display: none !important;
+      }
+
+      body { background: white; padding: 0; }
+      .card, .table-wrap { box-shadow: none; }
+      h2 { break-after: avoid; }
+      table { min-width: 0; font-size: 10px; }
+      th, td { padding: 5px; }
+    }
+  </style>
+</head>
+
+<body>
+<main class="container">
+
+  <header>
+    <div>
+      <h1>🎬 Admin Dashboard</h1>
+      <div class="subtitle">Movie Ticket Booking Management & Reports</div>
+    </div>
+
+    <button id="refreshButton" class="no-print">🔄 Refresh Data</button>
+  </header>
+
+  <p id="message" role="status">Loading dashboard...</p>
+
+  <!-- SUMMARY CARDS -->
+  <section class="stats">
+    <div class="card">
+      <p>Total Bookings</p>
+      <div class="number" id="totalBookings">—</div>
+    </div>
+
+    <div class="card">
+      <p>Confirmed Bookings</p>
+      <div class="number" id="confirmedBookings">—</div>
+    </div>
+
+    <div class="card">
+      <p>Cancelled Bookings</p>
+      <div class="number" id="cancelledBookings">—</div>
+    </div>
+
+    <div class="card">
+      <p>Tickets Sold</p>
+      <div class="number" id="ticketsSold">—</div>
+    </div>
+
+    <div class="card">
+      <p>Confirmed Collection</p>
+      <div class="number" id="totalAmount">—</div>
+    </div>
+
+    <div class="card">
+      <p>Demo Refund Total</p>
+      <div class="number" id="refundAmount">—</div>
+    </div>
+  </section>
+
+  <!-- MOVIE-WISE REPORT -->
+  <h2>🎥 Movie-wise Reports</h2>
+  <p class="subtitle">Movie bookings, tickets sold and confirmed collection.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Movie</th>
+          <th>Bookings</th>
+          <th>Tickets</th>
+          <th>Collection</th>
+        </tr>
+      </thead>
+      <tbody id="movieRows"></tbody>
+    </table>
+  </div>
+
+  <!-- DAILY COLLECTION -->
+  <h2>📅 Daily Collection Report</h2>
+
+  <div class="toolbar no-print">
+    <label for="reportDate">Select date:</label>
+    <input type="date" id="reportDate">
+    <button id="dateButton">View Date</button>
+    <button id="clearDate" class="dark">Clear Date</button>
+  </div>
+
+  <div class="card">
+    <p id="dailyLabel">Collection across all available booking dates</p>
+    <div class="number" id="dailyCollection">₹0</div>
+    <p id="dailyBookings">Bookings: 0 | Tickets: 0</p>
+  </div>
+
+  <!-- ALL BOOKINGS -->
+  <h2>📋 All Booking Records</h2>
+
+  <div class="toolbar no-print">
+    <input
+      id="searchInput"
+      type="search"
+      placeholder="Search customer, movie or ID"
+      aria-label="Search bookings"
+    >
+
+    <select id="statusFilter" aria-label="Filter by booking status">
+      <option value="all">All statuses</option>
+      <option value="confirmed">Confirmed</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+
+    <button id="csvButton" class="green">⬇ Download CSV</button>
+    <button id="printButton" class="dark">🖨 Print Report</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Booking ID</th>
+          <th>Customer</th>
+          <th>Movie</th>
+          <th>Show Time</th>
+          <th>Tickets</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th>Refund</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody id="bookingRows"></tbody>
+    </table>
+  </div>
+
+  <p class="links no-print">
+    <a class="link" href="index.html">← Back to Home</a>
+    <a class="link" href="my-bookings.html">My Bookings</a>
+  </p>
+
+  <p class="subtitle">
+    Demo reporting only. Refund figures are calculations, not actual money
+    transfers. Protect this dashboard with server-side admin authentication
+    before using it with real customers.
+  </p>
+</main>
+
+<script>
+  const message = document.getElementById("message");
+  const bookingRows = document.getElementById("bookingRows");
+  const movieRows = document.getElementById("movieRows");
+
+  let allBookings = [];
+
+  const moviePrices = {
+    "Leo": 150,
+    "Pushpa 2": 180,
+    "Kalki 2898 AD": 200,
+    "Devara: Part 1": 180,
+    "Hanu-Man": 150,
+    "Lucky Baskhar": 160,
+    "Tillu Square": 150,
+    "Game Changer": 180,
+    "Mirai": 170,
+    "HIT: The 3rd Case": 190
+  };
+
+  function money(value) {
+    return "₹" + (Number(value) || 0).toLocaleString("en-IN");
+  }
+
+  function amount(booking) {
+    if (booking.totalAmount !== undefined &&
+        booking.totalAmount !== null) {
+      return Number(booking.totalAmount) || 0;
+    }
+
+    return (moviePrices[booking.movie] || 0) *
+      (Number(booking.tickets) || 0);
+  }
+
+  function isCancelled(booking) {
+    return String(booking.status || "Confirmed").toLowerCase() ===
+      "cancelled";
+  }
+
+  function dateOf(booking) {
+    const raw = booking.createdAt ||
+      booking.bookingDate ||
+      booking.date ||
+      booking.created_at;
+
+    if (!raw) return "";
+
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return "";
+
+    return [
+      parsed.getFullYear(),
+      String(parsed.getMonth() + 1).padStart(2, "0"),
+      String(parsed.getDate()).padStart(2, "0")
+    ].join("-");
+  }
+
+  function addCell(row, value) {
+    const td = document.createElement("td");
+    td.textContent =
+      value === undefined || value === null || value === ""
+        ? "—"
+        : String(value);
+
+    row.appendChild(td);
+  }
+
+  function showEmptyRow(tbody, columns, text) {
+    const row = document.createElement("tr");
+    const td = document.createElement("td");
+
+    td.colSpan = columns;
+    td.className = "empty";
+    td.textContent = text;
+
+    row.appendChild(td);
+    tbody.appendChild(row);
+  }
+
+  // SUMMARY CARDS
+  function renderSummary() {
+    const confirmed = allBookings.filter(b => !isCancelled(b));
+    const cancelled = allBookings.filter(isCancelled);
+
+    document.getElementById("totalBookings").textContent =
+      allBookings.length;
+
+    document.getElementById("confirmedBookings").textContent =
+      confirmed.length;
+
+    document.getElementById("cancelledBookings").textContent =
+      cancelled.length;
+
+    document.getElementById("ticketsSold").textContent =
+      confirmed.reduce(
+        (sum, b) => sum + (Number(b.tickets) || 0),
+        0
+      );
+
+    document.getElementById("totalAmount").textContent =
+      money(confirmed.reduce((sum, b) => sum + amount(b), 0));
+
+    document.getElementById("refundAmount").textContent =
+      money(cancelled.reduce(
+        (sum, b) => sum + (Number(b.refundAmount) || 0),
+        0
+      ));
+  }
+
+  // MOVIE-WISE REPORT
+  function renderMovieReport() {
+    movieRows.replaceChildren();
+
+    const report = {};
+
+    allBookings.forEach(b => {
+      const movie = b.movie || "Unknown movie";
+
+      if (!report[movie]) {
+        report[movie] = {
+          bookings: 0,
+          tickets: 0,
+          collection: 0
+        };
+      }
+
+      if (!isCancelled(b)) {
+        report[movie].bookings++;
+        report[movie].tickets += Number(b.tickets) || 0;
+        report[movie].collection += amount(b);
+      }
+    });
+
+    const movies = Object.entries(report).sort(
+      (a, b) => b[1].collection - a[1].collection
+    );
+
+    if (!movies.length) {
+      showEmptyRow(movieRows, 4, "No booking records found.");
+      return;
+    }
+
+    movies.forEach(([movie, data]) => {
+      const row = document.createElement("tr");
+
+      addCell(row, movie);
+      addCell(row, data.bookings);
+      addCell(row, data.tickets);
+      addCell(row, money(data.collection));
+
+      movieRows.appendChild(row);
+    });
+  }
+
+  // DAILY COLLECTION REPORT
+  function renderDailyReport() {
+    const selectedDate = document.getElementById("reportDate").value;
+
+    const matching = allBookings.filter(b =>
+      !isCancelled(b) &&
+      (!selectedDate || dateOf(b) === selectedDate)
+    );
+
+    const total = matching.reduce(
+      (sum, b) => sum + amount(b), 0
+    );
+
+    const tickets = matching.reduce(
+      (sum, b) => sum + (Number(b.tickets) || 0), 0
+    );
+
+    document.getElementById("dailyLabel").textContent =
+      selectedDate
+        ? "Confirmed collection for " + selectedDate
+        : "Collection across all available booking dates";
+
+    document.getElementById("dailyCollection").textContent =
+      money(total);
+
+    document.getElementById("dailyBookings").textContent =
+      "Bookings: " + matching.length + " | Tickets: " + tickets;
+  }
+
+  // SEARCH AND STATUS FILTER
+  function getFilteredBookings() {
+    const query = document.getElementById("searchInput").value
+      .trim()
+      .toLowerCase();
+
+    const status = document.getElementById("statusFilter").value;
+
+    return allBookings.filter(b => {
+      const searchableText = [
+        b._id,
+        b.bookingId,
+        b.customerName,
+        b.movie,
+        b.showTime
+      ].join(" ").toLowerCase();
+
+      const matchesSearch = searchableText.includes(query);
+
+      const matchesStatus =
+        status === "all" ||
+        (status === "cancelled"
+          ? isCancelled(b)
+          : !isCancelled(b));
+
+      return matchesSearch && matchesStatus;
+    });
+  }
+
+  function renderBookings() {
+    bookingRows.replaceChildren();
+
+    const filtered = getFilteredBookings();
+
+    if (!filtered.length) {
+      showEmptyRow(bookingRows, 9, "No matching booking records.");
+      return;
+    }
+
+    filtered.forEach(b => {
+      const row = document.createElement("tr");
+
+      addCell(row, b.bookingId || b._id);
+      addCell(row, b.customerName);
+      addCell(row, b.movie);
+      addCell(row, b.showTime);
+      addCell(row, b.tickets);
+      addCell(row, money(amount(b)));
+
+      const statusCell = document.createElement("td");
+
+      statusCell.textContent =
+        isCancelled(b) ? "Cancelled" : "Confirmed";
+
+      statusCell.className =
+        isCancelled(b) ? "cancelled" : "confirmed";
+
+      row.appendChild(statusCell);
+
+      addCell(
+        row,
+        isCancelled(b) ? money(b.refundAmount) : "—"
+      );
+
+      addCell(row, dateOf(b) || "Date unavailable");
+
+      bookingRows.appendChild(row);
+    });
+  }
+
+  // LOAD BOOKINGS FROM BACKEND
+  async function loadDashboard() {
+    message.textContent = "Loading dashboard...";
+
+    try {
+      const response = await fetch("/api/bookings");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Could not load bookings.");
+      }
+
+      if (!Array.isArray(data)) {
+        throw new Error("Bookings API did not return a list.");
+      }
+
+      allBookings = data;
+
+      renderSummary();
+      renderMovieReport();
+      renderDailyReport();
+      renderBookings();
+
+      message.textContent = "Dashboard updated successfully.";
+    } catch (error) {
+      message.textContent =
+        "Error: " + error.message +
+        " Check that the server is running and /api/bookings works.";
+    }
+  }
+
+  // BUTTON EVENTS
+  document.getElementById("refreshButton").addEventListener(
+    "click",
+    loadDashboard
+  );
+
+  document.getElementById("searchInput").addEventListener(
+    "input",
+    renderBookings
+  );
+
+  document.getElementById("statusFilter").addEventListener(
+    "change",
+    renderBookings
+  );
+
+  document.getElementById("dateButton").addEventListener(
+    "click",
+    renderDailyReport
+  );
+
+  document.getElementById("clearDate").addEventListener(
+    "click",
+    () => {
+      document.getElementById("reportDate").value = "";
+      renderDailyReport();
+    }
+  );
+
+  // DOWNLOAD CSV
+  document.getElementById("csvButton").addEventListener(
+    "click",
+    () => {
+      const filtered = getFilteredBookings();
+
+      const headers = [
+        "Booking ID",
+        "Customer",
+        "Movie",
+        "Show Time",
+        "Tickets",
+        "Amount",
+        "Status",
+        "Refund",
+        "Date"
+      ];
+
+      function escapeCSV(value) {
+        return '"' +
+          String(value ?? "").replace(/"/g, '""') +
+          '"';
+      }
+
+      const lines = [
+        headers,
+        ...filtered.map(b => [
+          b.bookingId || b._id,
+          b.customerName,
+          b.movie,
+          b.showTime,
+          b.tickets,
+          amount(b),
+          isCancelled(b) ? "Cancelled" : "Confirmed",
+          b.refundAmount || 0,
+          dateOf(b)
+        ])
+      ];
+
+      const csv = "\uFEFF" + lines.map(line =>
+        line.map(escapeCSV).join(",")
+      ).join("\r\n");
+
+      const blob = new Blob(
+        [csv],
+        { type: "text/csv;charset=utf-8;" }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = "movie-booking-report.csv";
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+    }
+  );
+
+  // PRINT REPORT
+  document.getElementById("printButton").addEventListener(
+    "click",
+    () => window.print()
+  );
+
+  loadDashboard();
+</script>
+</body>
+</html>

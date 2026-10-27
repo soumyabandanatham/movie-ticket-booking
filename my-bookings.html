@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Bookings | Movie Ticket Booking</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 25px 15px;
+      color: #333;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: auto;
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px #ddd;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    .search-box {
+      margin: 20px 0;
+      padding: 18px;
+      background: #f8f8f8;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+
+    button {
+      background: #2457c5;
+      color: white;
+      border: none;
+      padding: 11px 15px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .cancel-button {
+      background: #d93025;
+    }
+
+    .booking {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 20px;
+      overflow-wrap: anywhere;
+    }
+
+    .booking p,
+    #searchResult p {
+      line-height: 1.5;
+    }
+
+    .cancelled {
+      color: #b3261e;
+      font-weight: bold;
+    }
+
+    .confirmed {
+      color: #188038;
+      font-weight: bold;
+    }
+
+    .refund {
+      background: #f0f8f0;
+      border: 1px solid #c5e1c5;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 12px 0;
+      overflow-wrap: anywhere;
+    }
+
+    #message,
+    #searchResult {
+      margin-top: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    .back {
+      display: inline-block;
+      margin-top: 20px;
+      color: white;
+      background: #333;
+      padding: 10px 16px;
+      text-decoration: none;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>My Bookings</h1>
+
+    <section class="search-box">
+      <h2>Search Booking by ID</h2>
+
+      <form id="searchForm">
+        <input
+          type="text"
+          id="bookingId"
+          placeholder="Enter your Booking ID"
+          required
+        >
+
+        <button type="submit" id="searchButton">
+          Search Booking
+        </button>
+      </form>
+
+      <div id="searchResult" role="status"></div>
+    </section>
+
+    <h2>All Bookings</h2>
+    <p id="message" role="status">Loading bookings...</p>
+    <div id="bookingsList"></div>
+
+    <a class="back" href="index.html">Back to Home</a>
+  </div>
+
+  <script>
+    const list = document.getElementById("bookingsList");
+    const message = document.getElementById("message");
+    const searchForm = document.getElementById("searchForm");
+    const searchResult = document.getElementById("searchResult");
+    const searchButton = document.getElementById("searchButton");
+
+    // Show refund information
+    function addRefundDetails(container, booking) {
+      if (booking.status !== "Cancelled") return;
+
+      const refundBox = document.createElement("div");
+      refundBox.className = "refund";
+
+      const refund = document.createElement("p");
+      refund.textContent =
+        "Refund Amount: ₹" + (booking.refundAmount ?? 0);
+
+      const fee = document.createElement("p");
+      fee.textContent =
+        "Cancellation Fee: ₹" + (booking.cancellationFee ?? 0);
+
+      const note = document.createElement("p");
+      note.textContent =
+        "Demo refund only. No real money has been transferred.";
+
+      refundBox.append(refund, fee, note);
+      container.appendChild(refundBox);
+    }
+
+    // Display booking details safely
+    function addBookingDetails(container, booking) {
+      const details = [
+        ["Customer", booking.customerName],
+        ["Movie", booking.movie],
+        ["Show Time", booking.showTime],
+        ["Tickets", booking.tickets],
+        ["Total Amount", "₹" + booking.totalAmount],
+        ["Booking ID", booking._id]
+      ];
+
+      details.forEach(([label, value]) => {
+        const p = document.createElement("p");
+        p.textContent = label + ": " + value;
+        container.appendChild(p);
+      });
+
+      const status = document.createElement("p");
+      status.textContent =
+        "Booking Status: " + (booking.status || "Confirmed");
+      status.className =
+        booking.status === "Cancelled" ? "cancelled" : "confirmed";
+
+      container.appendChild(status);
+      addRefundDetails(container, booking);
+    }
+
+    // Display all bookings
+    async function loadBookings() {
+      list.replaceChildren();
+      message.textContent = "Loading bookings...";
+
+      try {
+        const response = await fetch("/api/bookings");
+        const bookings = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            bookings.message || "Could not load bookings."
+          );
+        }
+
+        if (bookings.length === 0) {
+          message.textContent = "No bookings found.";
+          return;
+        }
+
+        message.textContent = "";
+
+        bookings.forEach(booking => {
+          const card = document.createElement("div");
+          card.className = "booking";
+
+          addBookingDetails(card, booking);
+
+          if (booking.status !== "Cancelled") {
+            const cancelButton = document.createElement("button");
+            cancelButton.textContent = "Cancel Booking";
+            cancelButton.className = "cancel-button";
+
+            cancelButton.addEventListener("click", async () => {
+              const confirmed = confirm(
+                "Cancel this booking? You will receive a 50% demo refund."
+              );
+
+              if (!confirmed) return;
+
+              cancelButton.disabled = true;
+              message.textContent = "Cancelling booking...";
+
+              try {
+                const response = await fetch(
+                  "/api/bookings/" +
+                    encodeURIComponent(booking._id),
+                  { method: "DELETE" }
+                );
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                  throw new Error(
+                    result.message || "Cancellation failed."
+                  );
+                }
+
+                // Show the refund result immediately
+                const refundMessage = document.createElement("div");
+                refundMessage.className = "refund";
+
+                const heading = document.createElement("h3");
+                heading.textContent = "Booking Cancelled Successfully";
+
+                const amount = document.createElement("p");
+                amount.textContent =
+                  "Refund Amount: ₹" + result.refundAmount;
+
+                const fee = document.createElement("p");
+                fee.textContent =
+                  "Cancellation Fee: ₹" + result.cancellationFee;
+
+                const note = document.createElement("p");
+                note.textContent = result.refundNote;
+
+                refundMessage.append(heading, amount, fee, note);
+
+                searchResult.replaceChildren(refundMessage);
+                message.textContent = result.message;
+
+                // Reload list to show Cancelled status
+                await loadBookings();
+              } catch (error) {
+                message.textContent = "Error: " + error.message;
+                cancelButton.disabled = false;
+              }
+            });
+
+            card.appendChild(cancelButton);
+          }
+
+          list.appendChild(card);
+        });
+      } catch (error) {
+        message.textContent =
+          "Error loading bookings: " + error.message;
+      }
+    }
+
+    // Search one booking by ID
+    searchForm.addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const id = document.getElementById("bookingId").value.trim();
+
+      if (!id) {
+        searchResult.textContent = "Please enter a Booking ID.";
+        return;
+      }
+
+      searchButton.disabled = true;
+      searchResult.textContent = "Searching...";
+
+      try {
+        const response = await fetch(
+          "/api/bookings/" + encodeURIComponent(id)
+        );
+
+        const booking = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            booking.message || "Booking not found."
+          );
+        }
+
+        searchResult.replaceChildren();
+
+        const heading = document.createElement("h3");
+        heading.textContent = "Booking Details";
+        searchResult.appendChild(heading);
+
+        addBookingDetails(searchResult, booking);
+      } catch (error) {
+        searchResult.textContent = error.message;
+      } finally {
+        searchButton.disabled = false;
+      }
+    });
+
+    loadBookings();
+  </script>
+</body>
+</html>

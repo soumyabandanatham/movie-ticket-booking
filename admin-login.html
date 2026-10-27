@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login - Movie Ticket Booking</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #141e30, #243b55);
+      padding: 20px;
+    }
+
+    .login-box {
+      width: 100%;
+      max-width: 380px;
+      padding: 30px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 30px #0004;
+    }
+
+    h2 {
+      text-align: center;
+      margin-top: 0;
+      color: #172554;
+    }
+
+    p {
+      text-align: center;
+      color: #64748b;
+    }
+
+    label {
+      display: block;
+      margin-top: 18px;
+      font-weight: bold;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      margin-top: 7px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    button {
+      width: 100%;
+      padding: 13px;
+      margin-top: 22px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    #message {
+      margin-top: 15px;
+      text-align: center;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="login-box">
+    <h2>🔐 Admin Login</h2>
+    <p>Movie Ticket Booking System</p>
+
+    <form id="loginForm">
+      <label for="username">Username</label>
+      <input
+        id="username"
+        type="text"
+        autocomplete="username"
+        required
+      >
+
+      <label for="password">Password</label>
+      <input
+        id="password"
+        type="password"
+        autocomplete="current-password"
+        required
+      >
+
+      <button id="loginButton" type="submit">Login</button>
+      <div id="message" role="status" aria-live="polite"></div>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById("loginForm");
+    const message = document.getElementById("message");
+    const button = document.getElementById("loginButton");
+
+    async function checkLogin() {
+      try {
+        const response = await fetch("/api/admin/session", {
+          credentials: "same-origin"
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.isAdmin) {
+            window.location.replace("/admin.html");
+          }
+        }
+      } catch (error) {
+        // Login form remains available if the status check fails.
+      }
+    }
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      message.style.color = "#334155";
+      message.textContent = "Checking login...";
+      button.disabled = true;
+
+      try {
+        const response = await fetch("/api/admin/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            username: document.getElementById("username").value,
+            password: document.getElementById("password").value
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Login failed. Check your details.");
+        }
+
+        message.style.color = "green";
+        message.textContent = "Login successful! Opening dashboard...";
+
+        window.location.replace("/admin.html");
+      } catch (error) {
+        message.style.color = "#dc2626";
+        message.textContent =
+          error.message || "Server connection failed. Please try again.";
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    checkLogin();
+  </script>
+</body>
+</html>

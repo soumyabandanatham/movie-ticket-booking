@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movie Ticket Booking</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>🎬 Movie Ticket Booking</h1>
+  <p>Choose your movie, select your seats and book your tickets!</p>
+</header>
+
+<main class="container">
+
+  <section>
+    <h2>Now Showing</h2>
+
+    <div class="movie-filters">
+      <h3>Find Your Movie</h3>
+
+      <label for="movieSearch">Search Movie</label>
+      <input type="search" id="movieSearch" placeholder="Type movie name...">
+
+      <label for="genreFilter">Genre</label>
+      <select id="genreFilter">
+        <option value="all">All Genres</option>
+        <option value="Action">Action</option>
+        <option value="Sci-Fi">Sci-Fi</option>
+        <option value="Fantasy">Fantasy</option>
+        <option value="Drama">Drama</option>
+        <option value="Comedy">Comedy</option>
+        <option value="Thriller">Thriller</option>
+      </select>
+
+      <label for="priceFilter">Ticket Price</label>
+      <select id="priceFilter">
+        <option value="all">All Prices</option>
+        <option value="150">₹150</option>
+        <option value="160">₹160</option>
+        <option value="170">₹170</option>
+        <option value="180">₹180</option>
+        <option value="190">₹190</option>
+        <option value="200">₹200</option>
+      </select>
+
+      <button type="button" id="clearFilters">Clear Filters</button>
+      <p id="movieCount">Showing 10 movies</p>
+    </div>
+
+    <div class="movies">
+
+      <article class="movie" data-name="Leo" data-genre="Action" data-price="150">
+        <div class="poster">🎬</div>
+        <h3>Leo</h3>
+        <p>Action | Telugu</p>
+        <p class="price">₹150 per ticket</p>
+        <button type="button" onclick="chooseMovie('Leo')">Book Now</button>
+      </article>
+
+      <article class="movie" data-name="Pushpa 2" data-genre="Action" data-price="180">
+        <div class="poster">🌿</div>
+        <h3>Pushpa 2</h3>
+        <p>Action | Telugu</p>
+        <p class="price">₹180 per ticket</p>
+        <button type="button" onclick="chooseMovie('Pushpa 2')">Book Now</button>
+      </article>
+
+      <article class="movie" data-name="Kalki 2898 AD" data-genre="Sci-Fi" data-price="200">
+        <div class="poster">🚀</div>
+        <h3>Kalki 2898 AD</h3>
+        <p>Sci-Fi | Telugu</p>
+        <p class="price">₹200 per ticket</p>
+        <button type="button" onclick="chooseMovie('Kalki 2898 AD')">Book Now</button>
+      </article>
+
+      <article class="movie" data-name="Devara: Part 1" data-genre="Action" data-price="180">
+        <div class="poster">🌊</div>
+        <h3>Devara: Part 1</h3>
+        <p>Action | Telugu</p>
+        <p class="price">₹180 per ticket</p>
+        <button type="button" onclick="chooseMovie('Devara: Part 1')">Book Now</button>
+      </article>
+
+      <article class="movie" data-name="Hanu-Man" data-genre="Fantasy" data-price="150">
+        <div class="poster">⚡</div>
+        <h3>Hanu-Man</h3>
+        <p>Fantasy | Telugu</p>
+        <p class="price">₹150 per ticket</p>
+        <button type="button" onclick="chooseMovie('Hanu-Man')">Book Now</button>
+      </article>
+
+      <article class="movie" data-name="Lucky Baskhar" data-genre="Drama" data-price="160">
+        <div class="poster">💰</div>
+        <h3>Lucky Baskhar</h3>
+        <p>Drama | Telugu</p>
+        <p class="price">₹160 per ticket</p>
+        <button type="button" onclick="chooseMovie('Lucky Baskhar')">Book Now</button>
+      </article>
+
+      <article class="movie" data-name="Tillu Square" data-genre="Comedy" data-price="150">
+        <div class="poster">😂</div>
+        <h3>Tillu Square</h3>
+        <p>Comedy | Telugu</p>
+        <p class="price">₹150 per ticket</p>
+        <button type="button" onclick="chooseMovie('Tillu Square')">Book Now</button>
+      </article>
+
+      <article class="movie" data-name="Game Changer" data-genre="Action" data-price="180">
+        <div class="poster">🎭</div>
+        <h3>Game Changer</h3>
+        <p>Action | Telugu</p>
+        <p class="price">₹180 per ticket</p>
+        <button type="button" onclick="chooseMovie('Game Changer')">Book Now</button>
+      </article>
+
+      <article class="movie" data-name="Mirai" data-genre="Fantasy" data-price="170">
+        <div class="poster">✨</div>
+        <h3>Mirai</h3>
+        <p>Fantasy | Telugu</p>
+        <p class="price">₹170 per ticket</p>
+        <button type="button" onclick="chooseMovie('Mirai')">Book Now</button>
+      </article>
+
+      <article class="movie" data-name="HIT: The 3rd Case" data-genre="Thriller" data-price="190">
+        <div class="poster">🔍</div>
+        <h3>HIT: The 3rd Case</h3>
+        <p>Thriller | Telugu</p>
+        <p class="price">₹190 per ticket</p>
+        <button type="button" onclick="chooseMovie('HIT: The 3rd Case')">Book Now</button>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="booking" id="booking">
+    <h2>🎟️ Book Your Tickets</h2>
+
+    <form id="bookingForm">
+
+      <label for="customerName">Your Name</label>
+      <input type="text" id="customerName" placeholder="Enter your name" required>
+
+      <label for="movie">Select Movie</label>
+      <select id="movie" required>
+        <option value="Leo">Leo - ₹150</option>
+        <option value="Pushpa 2">Pushpa 2 - ₹180</option>
+        <option value="Kalki 2898 AD">Kalki 2898 AD - ₹200</option>
+        <option value="Devara: Part 1">Devara: Part 1 - ₹180</option>
+        <option value="Hanu-Man">Hanu-Man - ₹150</option>
+        <option value="Lucky Baskhar">Lucky Baskhar - ₹160</option>
+        <option value="Tillu Square">Tillu Square - ₹150</option>
+        <option value="Game Changer">Game Changer - ₹180</option>
+        <option value="Mirai">Mirai - ₹170</option>
+        <option value="HIT: The 3rd Case">HIT: The 3rd Case - ₹190</option>
+      </select>
+
+      <label for="showTime">Select Show Time</label>
+      <select id="showTime" required>
+        <option value="10:00 AM">10:00 AM</option>
+        <option value="2:00 PM">2:00 PM</option>
+        <option value="6:00 PM">6:00 PM</option>
+        <option value="9:00 PM">9:00 PM</option>
+      </select>
+
+      <section class="seat-section">
+        <h3>Select Your Seats</h3>
+        <p class="seat-instructions">
+          Select 1 to 10 seats. Grey seats are already booked.
+        </p>
+
+        <div class="screen">SCREEN THIS WAY</div>
+
+        <div class="seat-legend">
+          <span>⬜ Available</span>
+          <span>🟩 Selected</span>
+          <span>⬛ Booked</span>
+        </div>
+
+        <div id="seatGrid" class="seat-grid">Loading seats...</div>
+        <p id="seatSummary" class="seat-summary">Selected seats: None</p>
+        <p id="seatMessage" role="status"></p>
+      </section>
+
+      <label for="tickets">Number of Tickets</label>
+      <input type="number" id="tickets" min="1" max="10" value="0" readonly required>
+
+      <p>Total Amount: <strong id="total">₹0</strong></p>
+
+      <button type="submit">Confirm Booking</button>
+    </form>
+
+    <p id="message" role="status"></p>
+    <section id="digitalTicket" class="digital-ticket" hidden>
+  <div class="ticket-header">
+    <h2>🎟️ Your Digital Ticket</h2>
+    <p>Booking confirmed!</p>
+  </div>
+
+  <div class="ticket-body">
+    <p><strong>Booking ID:</strong> <span id="ticketBookingId">-</span></p>
+    <p><strong>Customer:</strong> <span id="ticketCustomer">-</span></p>
+    <p><strong>Movie:</strong> <span id="ticketMovie">-</span></p>
+    <p><strong>Show Time:</strong> <span id="ticketShowTime">-</span></p>
+    <p><strong>Seats:</strong> <span id="ticketSeats">-</span></p>
+    <p><strong>Tickets:</strong> <span id="ticketCount">-</span></p>
+    <p><strong>Total Amount:</strong> <span id="ticketTotal">-</span></p>
+  </div>
+
+  <p class="ticket-note">Please keep this ticket for your booking reference.</p>
+
+  <button type="button" id="printTicket">Print Ticket</button>
+</section>
+  </section>
+
+</main>
+
+<footer>
+  <p>Movie Ticket Booking Project</p>
+  <p>
+    <a href="my-bookings.html">My Bookings</a> |
+    <a href="admin.html">Admin Dashboard</a>
+  </p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
