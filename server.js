@@ -7,44 +7,15 @@ const session = require("express-session");
 const { MongoClient, ObjectId } = require("mongodb");
 
 const app = express();
-app.use(express.static(__dirname));
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
-app.use((req, res, next) => {
-  console.log("REQUEST:", req.method, req.url);
-  next();
-});
-
-app.use(express.json({ limit: "20kb" }));
-
-// Session middleware
-app.use(
-  session({
-    name: "admin.sid",
-    secret: SESSION_SECRET || "invalid-secret-not-for-use",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      sameSite: "strict",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 30 * 60 * 1000
-    }
-  })
-);
-
-// Prevent browser caching of private API responses
-app.use("/api/admin", (req, res, next) => {
-  res.set("Cache-Control", "no-store");
-  next();
-});
-
-let bookingsCollection;
+let bookingsCollection = null;
+let mongoReady = false;
 
 // Movie prices
 const prices = {
@@ -69,7 +40,22 @@ for (const row of ["A", "B", "C", "D", "E"]) {
   }
 }
 
-// Compare credentials without ordinary string comparison
+app.use(express.static(__dirname));
+app.use(express.json({ limit: "20kb" }));
+
+app.use(session({
+  name: "admin.sid",
+  secret: SESSION_SECRET || "temporary-secret-change-this",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 30 * 60 * 1000
+  }
+}));
+
 function safeEqual(a, b) {
   if (typeof a !== "string" || typeof b !== "string") {
     return false;
@@ -78,13 +64,10 @@ function safeEqual(a, b) {
   const first = Buffer.from(a);
   const second = Buffer.from(b);
 
-  return (
-    first.length === second.length &&
-    crypto.timingSafeEqual(first, second)
-  );
+  return first.length === second.length &&
+    crypto.timingSafeEqual(first, second);
 }
 
-// Require a valid admin session
 function requireAdmin(req, res, next) {
   res.set("Cache-Control", "no-store");
 
@@ -96,6 +79,34 @@ function requireAdmin(req, res, next) {
     message: "Admin login required."
   });
 }
+
+function requireDatabase(req, res, next) {
+  if (!mongoReady || !bookingsCollection) {
+    return res.status(503).json({
+      message: "Database is temporarily unavailable. Please try again later."
+    });
+  }
+
+  next();
+}
+
+// Health check — Render can check that the web server is running
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    server: "running",
+    database: mongoReady ? "connected" : "unavailable"
+  });
+});
+
+// Public home page
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+// Admin dashboard page
+app.get("/admin.html", (req, res) => {
+  res.sendFile(path.join(__dirname, "admin.html"));
+});
 
 // Admin login
 app.post("/api/admin/login", (req, res, next) => {
@@ -110,31 +121,24 @@ app.post("/api/admin/login", (req, res, next) => {
     });
   }
 
-  // Regenerate session after successful authentication
   req.session.regenerate((error) => {
-    if (error) {
-      return next(error);
-    }
+    if (error) return next(error);
 
     req.session.isAdmin = true;
 
     req.session.save((saveError) => {
-      if (saveError) {
-        return next(saveError);
-      }
+      if (saveError) return next(saveError);
 
-      return res.json({
-        message: "Admin login successful."
-      });
+      res.json({ message: "Admin login successful." });
     });
   });
 });
 
-// Check whether admin is logged in
+// Check admin session
 app.get("/api/admin/session", (req, res) => {
   res.set("Cache-Control", "no-store");
 
-  return res.json({
+  res.json({
     loggedIn: req.session?.isAdmin === true
   });
 });
@@ -142,338 +146,325 @@ app.get("/api/admin/session", (req, res) => {
 // Admin logout
 app.post("/api/admin/logout", requireAdmin, (req, res, next) => {
   req.session.destroy((error) => {
-    if (error) {
-      return next(error);
-    }
+    if (error) return next(error);
 
     res.clearCookie("admin.sid", {
       httpOnly: true,
-      sameSite: "strict",
+      sameSite: "lax",
       secure: process.env.NODE_ENV === "production"
     });
 
-    return res.json({
-      message: "Logged out successfully."
-    });
+    res.json({ message: "Logged out successfully." });
   });
 });
 
-// Public home page
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
-});
+// Get booked seats
+app.get(
+  "/api/booked-seats",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const { movie, showTime } = req.query;
 
-// Serve the dashboard page.
-// Booking data APIs are protected separately.
-app.get("/admin.html", (req, res) => {
-  res.sendFile(path.join(__dirname, "admin.html"));
-});
+      if (
+        !Object.hasOwn(prices, movie) ||
+        !showTimes.includes(showTime)
+      ) {
+        return res.status(400).json({
+          message: "Invalid movie or show time."
+        });
+      }
 
-// Get booked seats for a movie and show time
-app.get("/api/booked-seats", async (req, res) => {
-  try {
-    const { movie, showTime } = req.query;
+      const bookings = await bookingsCollection
+        .find({
+          movie,
+          showTime,
+          status: { $ne: "Cancelled" }
+        })
+        .project({ seats: 1 })
+        .toArray();
 
-    if (
-      !Object.hasOwn(prices, movie) ||
-      !showTimes.includes(showTime)
-    ) {
-      return res.status(400).json({
-        message: "Invalid movie or show time."
+      const bookedSeats = [
+        ...new Set(
+          bookings.flatMap((booking) =>
+            Array.isArray(booking.seats) ? booking.seats : []
+          )
+        )
+      ];
+
+      res.json({ bookedSeats });
+    } catch (error) {
+      console.error("Load seats error:", error.message);
+      res.status(500).json({
+        message: "Could not load booked seats."
       });
     }
+  }
+);
 
-    const bookings = await bookingsCollection
-      .find({
+// Get all bookings — admin only
+app.get(
+  "/api/bookings",
+  requireDatabase,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const bookings = await bookingsCollection
+        .find({})
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.json(bookings);
+    } catch (error) {
+      console.error("Fetch bookings error:", error.message);
+      res.status(500).json({
+        message: "Could not fetch bookings."
+      });
+    }
+  }
+);
+
+// Search booking by ID — admin only
+app.get(
+  "/api/bookings/:id",
+  requireDatabase,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({
+          message: "Invalid Booking ID."
+        });
+      }
+
+      const booking = await bookingsCollection.findOne({
+        _id: new ObjectId(id)
+      });
+
+      if (!booking) {
+        return res.status(404).json({
+          message: "Booking not found."
+        });
+      }
+
+      res.json(booking);
+    } catch (error) {
+      console.error("Search booking error:", error.message);
+      res.status(500).json({
+        message: "Could not search booking."
+      });
+    }
+  }
+);
+
+// Cancel booking — admin only
+app.delete(
+  "/api/bookings/:id",
+  requireDatabase,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({
+          message: "Invalid Booking ID."
+        });
+      }
+
+      const booking = await bookingsCollection.findOne({
+        _id: new ObjectId(id)
+      });
+
+      if (!booking) {
+        return res.status(404).json({
+          message: "Booking not found."
+        });
+      }
+
+      if (booking.status === "Cancelled") {
+        return res.status(400).json({
+          message: "This booking is already cancelled."
+        });
+      }
+
+      const totalAmount = Number(booking.totalAmount) || 0;
+      const refundAmount = Math.round(totalAmount * 0.5);
+      const cancellationFee = totalAmount - refundAmount;
+
+      const result = await bookingsCollection.updateOne(
+        {
+          _id: new ObjectId(id),
+          status: { $ne: "Cancelled" }
+        },
+        {
+          $set: {
+            status: "Cancelled",
+            refundAmount,
+            cancellationFee,
+            cancelledAt: new Date()
+          }
+        }
+      );
+
+      if (result.modifiedCount === 0) {
+        return res.status(400).json({
+          message: "Booking could not be cancelled."
+        });
+      }
+
+      res.json({
+        message: "Booking cancelled successfully!",
+        bookingId: id,
+        totalAmount,
+        refundAmount,
+        cancellationFee,
+        status: "Cancelled",
+        refundNote: "Demo refund only. No real money has been transferred."
+      });
+    } catch (error) {
+      console.error("Cancel booking error:", error.message);
+      res.status(500).json({
+        message: "Could not cancel booking."
+      });
+    }
+  }
+);
+
+// Create booking
+app.post(
+  "/api/bookings",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const {
+        customerName,
         movie,
         showTime,
-        status: { $ne: "Cancelled" }
-      })
-      .project({ seats: 1 })
-      .toArray();
+        tickets,
+        seats
+      } = req.body || {};
 
-    const bookedSeats = [
-      ...new Set(
-        bookings.flatMap((booking) =>
-          Array.isArray(booking.seats) ? booking.seats : []
-        )
-      )
-    ];
-
-    return res.json({ bookedSeats });
-  } catch (error) {
-    console.error("Load seats error:", error.message);
-
-    return res.status(500).json({
-      message: "Could not load booked seats."
-    });
-  }
-});
-
-// Get all bookings - admin only
-app.get("/api/bookings", requireAdmin, async (req, res) => {
-  try {
-    const bookings = await bookingsCollection
-      .find({})
-      .sort({ createdAt: -1 })
-      .toArray();
-
-    return res.json(bookings);
-  } catch (error) {
-    console.error("Fetch bookings error:", error.message);
-
-    return res.status(500).json({
-      message: "Could not fetch bookings."
-    });
-  }
-});
-
-// Search booking by ID - admin only
-app.get("/api/bookings/:id", requireAdmin, async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({
-        message: "Invalid Booking ID."
-      });
-    }
-
-    const booking = await bookingsCollection.findOne({
-      _id: new ObjectId(id)
-    });
-
-    if (!booking) {
-      return res.status(404).json({
-        message: "Booking not found."
-      });
-    }
-
-    return res.json(booking);
-  } catch (error) {
-    console.error("Search booking error:", error.message);
-
-    return res.status(500).json({
-      message: "Could not search booking."
-    });
-  }
-});
-
-// Cancel booking - admin only; demo refund calculation
-app.delete("/api/bookings/:id", requireAdmin, async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({
-        message: "Invalid Booking ID."
-      });
-    }
-
-    const booking = await bookingsCollection.findOne({
-      _id: new ObjectId(id)
-    });
-
-    if (!booking) {
-      return res.status(404).json({
-        message: "Booking not found."
-      });
-    }
-
-    if (booking.status === "Cancelled") {
-      return res.status(400).json({
-        message: "This booking is already cancelled."
-      });
-    }
-
-    const totalAmount = Number(booking.totalAmount) || 0;
-    const refundAmount = Math.round(totalAmount * 0.5);
-    const cancellationFee = totalAmount - refundAmount;
-
-    const result = await bookingsCollection.updateOne(
-      {
-        _id: new ObjectId(id),
-        status: { $ne: "Cancelled" }
-      },
-      {
-        $set: {
-          status: "Cancelled",
-          refundAmount,
-          cancellationFee,
-          cancelledAt: new Date()
-        }
+      if (
+        typeof customerName !== "string" ||
+        !customerName.trim() ||
+        !Object.hasOwn(prices, movie) ||
+        !showTimes.includes(showTime) ||
+        !Number.isInteger(tickets) ||
+        tickets < 1 ||
+        tickets > 10 ||
+        !Array.isArray(seats) ||
+        seats.length !== tickets ||
+        seats.some(
+          (seat) =>
+            typeof seat !== "string" ||
+            !validSeats.includes(seat)
+        ) ||
+        new Set(seats).size !== seats.length
+      ) {
+        return res.status(400).json({
+          message: "Please check your name, movie, time and selected seats."
+        });
       }
-    );
 
-    if (result.modifiedCount === 0) {
-      return res.status(400).json({
-        message: "Booking could not be cancelled."
+      const conflictingBooking = await bookingsCollection.findOne({
+        movie,
+        showTime,
+        status: { $ne: "Cancelled" },
+        seats: { $in: seats }
+      });
+
+      if (conflictingBooking) {
+        return res.status(409).json({
+          message: "One or more seats were just booked. Refresh seats and select again."
+        });
+      }
+
+      const booking = {
+        customerName: customerName.trim(),
+        movie,
+        showTime,
+        tickets,
+        seats,
+        totalAmount: prices[movie] * tickets,
+        status: "Confirmed",
+        createdAt: new Date()
+      };
+
+      const result = await bookingsCollection.insertOne(booking);
+
+      console.log("BOOKING SAVED:", result.insertedId.toString());
+
+      res.status(201).json({
+        message: "Booking confirmed!",
+        bookingId: result.insertedId.toString(),
+        totalAmount: booking.totalAmount,
+        status: booking.status,
+        seats: booking.seats
+      });
+    } catch (error) {
+      console.error("Booking error:", error.message);
+      res.status(500).json({
+        message: "Could not save booking."
       });
     }
-
-    return res.json({
-      message: "Booking cancelled successfully!",
-      bookingId: id,
-      totalAmount,
-      refundAmount,
-      cancellationFee,
-      status: "Cancelled",
-      refundNote: "Demo refund only. No real money has been transferred."
-    });
-  } catch (error) {
-    console.error("Cancel booking error:", error.message);
-
-    return res.status(500).json({
-      message: "Could not cancel booking."
-    });
   }
-});
-
-// Create booking - public route
-app.post("/api/bookings", async (req, res) => {
-  try {
-    const {
-      customerName,
-      movie,
-      showTime,
-      tickets,
-      seats
-    } = req.body || {};
-
-    if (
-      typeof customerName !== "string" ||
-      !customerName.trim() ||
-      !Object.hasOwn(prices, movie) ||
-      !showTimes.includes(showTime) ||
-      !Number.isInteger(tickets) ||
-      tickets < 1 ||
-      tickets > 10 ||
-      !Array.isArray(seats) ||
-      seats.length !== tickets ||
-      seats.some(
-        (seat) =>
-          typeof seat !== "string" ||
-          !validSeats.includes(seat)
-      ) ||
-      new Set(seats).size !== seats.length
-    ) {
-      return res.status(400).json({
-        message: "Please check your name, movie, time and selected seats."
-      });
-    }
-
-    // Check whether the requested seats are already booked
-    const conflictingBooking = await bookingsCollection.findOne({
-      movie,
-      showTime,
-      status: { $ne: "Cancelled" },
-      seats: { $in: seats }
-    });
-
-    if (conflictingBooking) {
-      return res.status(409).json({
-        message: "One or more seats were just booked. Refresh seats and select again."
-      });
-    }
-
-    const booking = {
-      customerName: customerName.trim(),
-      movie,
-      showTime,
-      tickets,
-      seats,
-      totalAmount: prices[movie] * tickets,
-      status: "Confirmed",
-      createdAt: new Date()
-    };
-
-    const result = await bookingsCollection.insertOne(booking);
-
-    console.log("BOOKING SAVED:", result.insertedId.toString());
-
-    return res.status(201).json({
-      message: "Booking confirmed!",
-      bookingId: result.insertedId.toString(),
-      totalAmount: booking.totalAmount,
-      status: booking.status,
-      seats: booking.seats
-    });
-  } catch (error) {
-    console.error("Booking error:", error.message);
-
-    return res.status(500).json({
-      message: "Could not save booking."
-    });
-  }
-});
+);
 
 // General error handler
 app.use((error, req, res, next) => {
   console.error("Server error:", error.message);
 
-  if (res.headersSent) {
-    return next(error);
-  }
+  if (res.headersSent) return next(error);
 
-  return res.status(500).json({
+  res.status(500).json({
     message: "An internal server error occurred."
   });
 });
 
-// Connect to MongoDB and start server
-async function startServer() {
+// Start listening immediately, even if MongoDB is temporarily unavailable
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server listening on port ${PORT}`);
+});
+
+// Connect to MongoDB in the background
+async function connectDatabase() {
   if (!MONGODB_URI) {
-    console.error("MongoDB URI is missing. Check your .env file.");
-    process.exitCode = 1;
+    console.error("MONGODB_URI is missing from environment variables.");
     return;
   }
 
   if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !SESSION_SECRET) {
-    console.error(
-      "Set ADMIN_USERNAME, ADMIN_PASSWORD and SESSION_SECRET in .env."
-    );
-    process.exitCode = 1;
+    console.error("One or more required environment variables are missing.");
     return;
   }
 
-  if (
-    ADMIN_PASSWORD.length < 12 ||
-    SESSION_SECRET.length < 32
-  ) {
-    console.error(
-      "Use an admin password of at least 12 characters and a session secret of at least 32 characters."
-    );
-    process.exitCode = 1;
+  if (ADMIN_PASSWORD.length < 12 || SESSION_SECRET.length < 32) {
+    console.error("Admin password must be at least 12 characters and session secret at least 32 characters.");
     return;
   }
 
-  if (
-    ADMIN_PASSWORD === "ChangeThisToYourOwnStrongPassword123!" ||
-    SESSION_SECRET === "UseYourOwnLongRandomSecretHere987654321"
-  ) {
-    console.error("Replace the example credentials in .env with your own values.");
-    process.exitCode = 1;
-    return;
-  }
-
-  const client = new MongoClient(MONGODB_URI);
+  const client = new MongoClient(MONGODB_URI, {
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000
+  });
 
   try {
     await client.connect();
 
     const db = client.db("MovieBookingDB");
     bookingsCollection = db.collection("bookings");
+    mongoReady = true;
 
-    app.listen(PORT, () => {
-      console.log(`Server running at http://localhost:${PORT}`);
-      console.log("MongoDB connected successfully!");
-      console.log("Admin login API ready.");
-    });
+    console.log("MongoDB connected successfully!");
   } catch (error) {
+    mongoReady = false;
     console.error("MongoDB connection failed:", error.message);
+    console.error("Check Atlas connection string, database user password, and Network Access.");
     await client.close().catch(() => {});
-    process.exitCode = 1;
   }
 }
 
-startServer();
+connectDatabase();
